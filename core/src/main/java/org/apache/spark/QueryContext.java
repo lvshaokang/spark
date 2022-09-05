@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Query context of a {@link SparkThrowable}. It helps users understand where error occur
  * while executing queries.
- *
+ * // 你好
  * @since 3.4.0
  */
 @Evolving
@@ -30,6 +30,7 @@ public interface QueryContext {
     // The object type of the query which throws the exception.
     // If the exception is directly from the main query, it should be an empty string.
     // Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+    // 你好
     String objectType();
 
     // The object name of the query which throws the exception.
