@@ -21,7 +21,8 @@ import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -61,18 +62,40 @@ case class CallMethodViaReflection(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
-      TypeCheckFailure("requires at least two arguments")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_PARAMS",
+        messageParameters = Map("actualNum" -> children.size.toString)
+      )
     } else if (!children.take(2).forall(e => e.dataType == StringType && e.foldable)) {
       // The first two arguments must be string type.
-      TypeCheckFailure("first two arguments should be string literals")
+      DataTypeMismatch(
+        errorSubClass = "CALL_METHOD_ARGUMENTS_WRONG_TYPE",
+        messageParameters = Map(
+          "index" -> "first two",
+          "required" -> s"foldable ${toSQLType(StringType)}",
+          "actual" -> children.take(2).map(_.dataType).map(toSQLType).mkString(", "))
+      )
     } else if (!classExists) {
-      TypeCheckFailure(s"class $className not found")
+      DataTypeMismatch(
+        errorSubClass = "CALL_METHOD_CLASS_NOT_FOUND",
+        messageParameters = Map("className" -> s"$className")
+      )
     } else if (children.slice(2, children.length)
         .exists(e => !CallMethodViaReflection.typeMapping.contains(e.dataType))) {
-      TypeCheckFailure("arguments from the third require boolean, byte, short, " +
-        "integer, long, float, double or string expressions")
+      DataTypeMismatch(
+        errorSubClass = "CALL_METHOD_ARGUMENTS_WRONG_TYPE",
+        messageParameters = Map(
+          "index" -> "third",
+          "required" -> CallMethodViaReflection.typeMapping.keys.map(toSQLType).mkString(", "),
+          "actual" -> children.slice(2, children.length).map(_.dataType)
+            .map(toSQLType).mkString(", ")
+        )
+      )
     } else if (method == null) {
-      TypeCheckFailure(s"cannot find a static method that matches the argument types in $className")
+      DataTypeMismatch(
+        errorSubClass = "CALL_METHOD_NOT_FOUND",
+        messageParameters = Map("className" -> s"$className")
+      )
     } else {
       TypeCheckSuccess
     }

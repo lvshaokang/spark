@@ -101,6 +101,21 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "CALL_METHOD_ARGUMENTS_WRONG_TYPE" : {
+        "message" : [
+          "arguments from the <index> require <required>, but it's [<actual>]."
+        ]
+      },
+      "CALL_METHOD_CLASS_NOT_FOUND" : {
+        "message" : [
+          "class <className> not found."
+        ]
+      },
+      "CALL_METHOD_NOT_FOUND" : {
+        "message" : [
+          "cannot find a static method that matches the argument types in <className>."
+        ]
+      },
       "CANNOT_CONVERT_TO_JSON" : {
         "message" : [
           "Unable to convert column <name> of type <type> to JSON."

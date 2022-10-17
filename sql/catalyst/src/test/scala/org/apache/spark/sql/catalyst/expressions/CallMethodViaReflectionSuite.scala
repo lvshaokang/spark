@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -60,24 +60,29 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   }
 
   test("class not found") {
-    val ret = createExpr("some-random-class", "method").checkInputDataTypes()
-    assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("not found") && errorMsg.contains("class"))
+    createExpr("some-random-class", "method").checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "CALL_METHOD_CLASS_NOT_FOUND")
+        assert(messageParameters === Map("className" -> "some-random-class"))
+    }
   }
 
   test("method not found because name does not match") {
-    val ret = createExpr(staticClassName, "notfoundmethod").checkInputDataTypes()
-    assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("cannot find a static method"))
+    createExpr(staticClassName, "notfoundmethod").checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "CALL_METHOD_NOT_FOUND")
+        assert(messageParameters === Map("className" ->
+          "org.apache.spark.sql.catalyst.expressions.ReflectStaticClass"))
+    }
   }
 
   test("method not found because there is no static method") {
-    val ret = createExpr(dynamicClassName, "method1").checkInputDataTypes()
-    assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("cannot find a static method"))
+    createExpr(dynamicClassName, "method1").checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "CALL_METHOD_NOT_FOUND")
+        assert(messageParameters === Map("className" ->
+          "org.apache.spark.sql.catalyst.expressions.ReflectDynamicClass"))
+    }
   }
 
   test("input type checking") {
@@ -88,11 +93,29 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
     assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
   }
 
+  test("method arguments with int type") {
+    CallMethodViaReflection(
+      Seq(Literal.create(0, IntegerType), Literal.create("wrongtype", StringType))
+    ).checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "CALL_METHOD_ARGUMENTS_WRONG_TYPE")
+        assert(messageParameters === Map(
+          "index" -> "first two",
+          "required" -> "foldable \"STRING\"",
+          "actual" -> "\"INT\", \"STRING\""))
+    }
+  }
+
   test("unsupported type checking") {
-    val ret = createExpr(staticClassName, "method1", new Timestamp(1)).checkInputDataTypes()
-    assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("arguments from the third require boolean, byte, short"))
+    createExpr(staticClassName, "method1", new Timestamp(1)).checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "CALL_METHOD_ARGUMENTS_WRONG_TYPE")
+        assert(messageParameters === Map(
+          "index" -> "third",
+          "required" -> ("\"FLOAT\", \"STRING\", \"SMALLINT\", \"TINYINT\", " +
+            "\"BOOLEAN\", \"DOUBLE\", \"INT\", \"BIGINT\""),
+          "actual" -> "\"TIMESTAMP\""))
+    }
   }
 
   test("invoking methods using acceptable types") {
